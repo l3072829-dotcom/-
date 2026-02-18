@@ -3,138 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StyleHero X</title>
+    <title>StyleHero X | AI 360 Showroom</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
     <style>
-        :root { --apple-blue: #0071e3; --glass: rgba(255, 255, 255, 0.8); }
-        body { background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; justify-content: center; min-height: 100vh; color: #1d1d1f; }
+        :root { --apple-blue: #0071e3; --bg: #f5f5f7; --glass: rgba(255, 255, 255, 0.8); }
+        body { background: var(--bg); font-family: -apple-system, sans-serif; margin: 0; display: flex; justify-content: center; overflow-x: hidden; color: #1d1d1f; }
         .container { width: 90%; max-width: 440px; padding: 40px 0; text-align: center; }
+
+        /* 3D 旋轉舞台 */
+        .stage-box { perspective: 1500px; width: 320px; height: 480px; margin: 0 auto 30px; cursor: grab; }
+        #rotating-stage { 
+            position: relative; width: 100%; height: 100%; 
+            transform-style: preserve-3d; transition: transform 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #model-base { width: 85%; height: 85%; object-fit: contain; pointer-events: none; opacity: 0.8; }
         
-        /* 頂部導航 */
-        h1 { font-weight: 700; font-size: 28px; letter-spacing: -0.5px; margin-bottom: 10px; }
-        .subtitle { color: #86868b; font-size: 14px; margin-bottom: 30px; }
-
-        /* 性別切換器 */
-        .switch-box { display: flex; background: #e3e3e7; padding: 3px; border-radius: 20px; width: 200px; margin: 0 auto 30px; }
-        .s-btn { flex: 1; padding: 8px; border-radius: 17px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.3s; color: #86868b; background: transparent; }
-        .s-btn.active { background: white; color: #1d1d1f; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-
-        /* AI 模擬舞台 */
-        .stage { 
-            position: relative; width: 320px; height: 420px; background: white; 
-            margin: 0 auto 30px; border-radius: 35px; overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center;
+        .cloth-layer { 
+            position: absolute; width: 68%; height: 62%; top: 14%;
+            mix-blend-mode: multiply; pointer-events: none;
+            object-fit: cover; border-radius: 40% 40% 25% 25%;
+            backface-visibility: hidden; transition: opacity 0.8s ease;
         }
-        #model { width: 90%; height: 90%; object-fit: contain; transition: 0.5s; filter: grayscale(0.2); }
-        #overlay { 
-            position: absolute; width: 75%; height: 75%; top: 15%;
-            mix-blend-mode: multiply; opacity: 0; transition: 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-            filter: contrast(1.1) brightness(1.1); pointer-events: none;
+        
+        #front-img { transform: translateZ(2px); z-index: 10; }
+        #back-img { transform: translateZ(-2px) rotateY(180deg); z-index: 5; }
+
+        /* AI 加載狀態 */
+        #ai-status { font-size: 12px; color: var(--apple-blue); margin-bottom: 10px; font-weight: 600; }
+        .loading-overlay { 
+            position: absolute; top:0; left:0; width:100%; height:100%; 
+            background: rgba(255,255,255,0.6); backdrop-filter: blur(5px);
+            display: none; align-items: center; justify-content: center; border-radius: 35px; z-index: 100;
         }
 
-        /* 控制區域 */
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-        .up-card { background: white; padding: 15px; border-radius: 18px; border: 1px solid #d2d2d7; cursor: pointer; font-size: 14px; font-weight: 500; transition: 0.2s; }
-        .up-card:active { transform: scale(0.98); background: #f5f5f7; }
-
-        /* 誠實診斷面板 */
-        .result-panel { 
-            background: var(--glass); backdrop-filter: blur(10px); border-radius: 22px; 
-            padding: 20px; text-align: left; display: none; border: 1px solid rgba(255,255,255,0.3);
-        }
-        .score-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .score-val { font-size: 24px; font-weight: 700; color: var(--apple-blue); }
-        .bar-bg { height: 6px; background: #e3e3e7; border-radius: 3px; overflow: hidden; }
-        .bar-fill { height: 100%; background: var(--apple-blue); width: 0%; transition: 1.5s cubic-bezier(0.1, 0.7, 0.1, 1); }
-        canvas { display: none; }
+        /* 控制組件 */
+        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .up-card { background: white; padding: 18px 10px; border-radius: 20px; border: 1px solid #d2d2d7; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .up-card.active { border-color: var(--apple-blue); background: #f0f7ff; }
+        
+        .btn-main { background: #1d1d1f; color: white; border: none; width: 100%; padding: 18px; border-radius: 20px; font-weight: 600; margin-top: 15px; cursor: pointer; }
+        .btn-reset { color: #ff3b30; background: none; border: none; margin-top: 20px; cursor: pointer; font-size: 13px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>StyleHero <span style="color:var(--apple-blue)">X</span></h1>
-    <p class="subtitle">AI 穿搭氛圍模擬器</p>
-
-    <div class="switch-box">
-        <button id="m-btn" class="s-btn active" onclick="setG('m')">男 性</button>
-        <button id="f-btn" class="s-btn" onclick="setG('f')">女 性</button>
-    </div>
-
-    <div class="stage">
-        <img id="model" src="https://www.freeiconspng.com/uploads/man-silhouette-icon-10.png" alt="model">
-        <img id="overlay" alt="cloth">
-    </div>
-
-    <div class="controls">
-        <label class="up-card">＋ 加入單品<input type="file" hidden onchange="process(this)"></label>
-        <label class="up-card">＋ 加入飾品<input type="file" hidden onchange="process(this)"></label>
-    </div>
-
-    <div id="res" class="result-panel">
-        <div class="score-row">
-            <span style="font-weight: 600;">誠實配色評分</span>
-            <span id="score" class="score-val">0</span>
+    <div id="ai-status">AI Engine Initializing...</div>
+    <h1 style="font-weight: 700; font-size: 24px; letter-spacing: -0.5px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
+    
+    <div class="stage-box" id="touch-area">
+        <div id="rotating-stage">
+            <div id="loader" class="loading-overlay">AI Analyzing...</div>
+            <img id="model-base" src="https://www.freeiconspng.com/uploads/man-silhouette-icon-10.png">
+            <img id="front-img" class="cloth-layer" style="opacity: 0;">
+            <img id="back-img" class="cloth-layer" style="opacity: 0;">
         </div>
-        <div class="bar-bg"><div id="fill" class="bar-fill"></div></div>
-        <p id="feedback" style="font-size: 13px; color: #424245; margin-top: 12px; line-height: 1.5;"></p>
     </div>
+
+    <div class="upload-grid">
+        <label class="up-card" id="l-f">＋ 拍攝正面<input type="file" hidden onchange="processImage(this, 'front')"></label>
+        <label class="up-card" id="l-b">＋ 拍攝背面<input type="file" hidden onchange="processImage(this, 'back')"></label>
+    </div>
+
+    <button class="btn-main" onclick="saveResult()">儲存穿搭大片</button>
+    <button class="btn-reset" onclick="location.reload()">清除並重置</button>
 </div>
 
-<canvas id="c"></canvas>
-
 <script>
-    const imgs = {
-        m: "https://www.freeiconspng.com/uploads/man-silhouette-icon-10.png",
-        f: "https://www.freeiconspng.com/uploads/female-icon-png-27.png"
+    let net, isDragging = false, startX, currentRot = 0, hasBack = false;
+
+    // 1. 初始化 AI 模型
+    async function initAI() {
+        net = await bodyPix.load({
+            architecture: 'MobileNetV1',
+            outputStride: 16,
+            multiplier: 0.75,
+            quantBytes: 2
+        });
+        document.getElementById('ai-status').innerText = "AI Ready • Local Processing";
+    }
+    initAI();
+
+    // 2. 旋轉邏輯
+    const stage = document.getElementById('rotating-stage');
+    const area = document.getElementById('touch-area');
+    const handleStart = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
+    const handleMove = (e) => {
+        if (!isDragging) return;
+        const x = e.pageX || e.touches[0].pageX;
+        currentRot += (x - startX) * 0.8;
+        stage.style.transform = `rotateY(${currentRot}deg)`;
+        startX = x;
     };
+    area.addEventListener('mousedown', handleStart);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', () => isDragging = false);
+    area.addEventListener('touchstart', handleStart);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', () => isDragging = false);
 
-    function setG(g) {
-        document.getElementById('m-btn').classList.toggle('active', g === 'm');
-        document.getElementById('f-btn').classList.toggle('active', g === 'f');
-        document.getElementById('model').src = imgs[g];
-    }
-
-    function process(input) {
+    // 3. AI 圖像處理 (提取衣服)
+    async function processImage(input, side) {
+        if (!input.files[0]) return;
+        document.getElementById('loader').style.display = 'flex';
+        
         const file = input.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const over = document.getElementById('overlay');
-            over.src = e.target.result;
-            over.style.opacity = "0.85";
-            // 奇妙角度隨機生成
-            const rot = (Math.random() * 14 - 7);
-            over.style.transform = `scale(1.1) rotate(${rot}deg)`;
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        
+        img.onload = async () => {
+            // 執行 AI 分割
+            const segmentation = await net.segmentPersonBodyParts(img);
             
-            // 執行誠實配色診斷
-            const img = new Image();
-            img.src = e.target.result;
-            img.onload = function() {
-                const cvs = document.getElementById('c');
-                const ctx = cvs.getContext('2d');
-                cvs.width = 10; cvs.height = 10;
-                ctx.drawImage(img, 0, 0, 10, 10);
-                const d = ctx.getImageData(5, 5, 1, 1).data;
-                const score = Math.floor(Math.random() * 20) + 75; // 模擬AI計算
-                showRes(score, d);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+
+            // 只保留軀幹與手臂 (BodyPix ID: 10-15)
+            for (let i = 0; i < pixels.length; i += 4) {
+                const partId = segmentation.data[i / 4];
+                if (![10, 11, 12, 13, 14, 15].includes(partId)) {
+                    pixels[i + 3] = 0; // 設為透明
+                }
             }
+            ctx.putImageData(imageData, 0, 0);
+            const extractUrl = canvas.toDataURL();
+
+            // 應用到舞台
+            if (side === 'front') {
+                const f = document.getElementById('front-img');
+                f.src = extractUrl;
+                f.style.opacity = "0.85";
+                document.getElementById('l-f').classList.add('active');
+                if (!hasBack) {
+                    const b = document.getElementById('back-img');
+                    b.src = extractUrl;
+                    b.style.opacity = "0.6";
+                    b.style.filter = "brightness(0.7) blur(2px)";
+                }
+            } else {
+                const b = document.getElementById('back-img');
+                b.src = extractUrl;
+                b.style.opacity = "0.85";
+                b.style.filter = "none";
+                hasBack = true;
+                document.getElementById('l-b').classList.add('active');
+            }
+            document.getElementById('loader').style.display = 'none';
         };
-        reader.readAsDataURL(file);
     }
 
-    function showRes(s, rgb) {
-        const panel = document.getElementById('res');
-        panel.style.display = 'block';
-        document.getElementById('score').innerText = s;
-        document.getElementById('fill').style.width = s + '%';
-        
-        let msg = "【誠實診斷】這件單品的色彩飽和度適中。";
-        if(rgb[0] > 200 && rgb[1] > 200) msg += "亮色系能有效提升面部氣色，建議搭配深色下裝。";
-        else msg += "深沉的色調展現了穩重的質感，適合正式場合。";
-        
-        document.getElementById('feedback').innerText = msg;
+    function saveResult() {
+        html2canvas(document.getElementById('touch-area')).then(canvas => {
+            const a = document.createElement('a');
+            a.download = 'StyleHeroX-360.png';
+            a.href = canvas.toDataURL();
+            a.click();
+        });
     }
 </script>
-
 </body>
 </html>
