@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>許阿桂試衣間 | AI 360 Showroom</title>
+    <title>許阿桂試衣間 | 3D 立體版</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
@@ -21,9 +21,26 @@
             display: flex; align-items: center; justify-content: center;
         }
 
-        /* 模特兒底圖：內聯 SVG 以確保 100% 顯影 */
-        .model-svg { width: 85%; height: 90%; opacity: 0.15; pointer-events: none; }
-        
+        /* 模特兒底圖：這次使用 CSS 創造立體感 */
+        #model-3d-wrapper { 
+            position: relative; width: 85%; height: 90%; 
+            display: flex; justify-content: center; align-items: center; 
+            transform-style: preserve-3d; transition: transform 0.3s;
+        }
+        .model-svg { 
+            width: 100%; height: 100%; opacity: 0.15; pointer-events: none;
+            filter: drop-shadow(0 0 5px rgba(0,0,0,0.2)); /* 輕微陰影 */
+            transform: translateZ(0px); /* 確保在 3D 空間 */
+        }
+        /* 創造立體感的偽元素光影 */
+        #model-3d-wrapper::before, #model-3d-wrapper::after {
+            content: ''; position: absolute; top: 0; bottom: 0;
+            width: 50%; opacity: 0.3; pointer-events: none;
+            border-radius: 50%; /* 模擬圓柱體陰影 */
+        }
+        #model-3d-wrapper::before { left: 0; background: radial-gradient(circle at 10% 50%, rgba(255,255,255,0.2) 0%, transparent 80%); } /* 左側高光 */
+        #model-3d-wrapper::after { right: 0; background: radial-gradient(circle at 90% 50%, rgba(0,0,0,0.1) 0%, transparent 80%); } /* 右側陰影 */
+
         /* 衣服與下著圖層 */
         .cloth-layer { 
             position: absolute; mix-blend-mode: multiply; pointer-events: none;
@@ -32,8 +49,8 @@
             opacity: 0;
         }
         
-        .top-piece { width: 68%; height: 55%; top: 12%; border-radius: 40% 40% 10% 10%; z-index: 15; transform: translateZ(5px); }
-        .bottom-piece { width: 45%; height: 45%; top: 48%; border-radius: 10% 10% 30% 30%; z-index: 10; transform: translateZ(3px); }
+        .top-piece { width: 68%; height: 55%; top: 12%; border-radius: 40% 40% 10% 10%; z-index: 15; transform: translateZ(8px); } /* 讓上衣更靠前 */
+        .bottom-piece { width: 45%; height: 45%; top: 48%; border-radius: 10% 10% 30% 30%; z-index: 10; transform: translateZ(5px); } /* 讓下著稍微靠後 */
 
         /* 掃描線動畫 */
         .scanning { position: absolute; width: 100%; height: 2px; background: var(--apple-blue); top: 0; left: 0; z-index: 50; display: none; box-shadow: 0 0 15px var(--apple-blue); animation: scan 2s infinite; }
@@ -65,9 +82,11 @@
     <div class="stage-box" id="touch-area">
         <div id="rotating-stage">
             <div id="scan-line" class="scanning"></div>
-            <svg id="model-svg" class="model-svg" viewBox="0 0 200 500">
-                <path fill="#000" d="M100,50c15,0,25,10,25,25s-10,25-25,25s-25-10-25-25S85,50,100,50z M60,110h80c10,0,15,5,15,15v100c0,10-5,15-15,15h-15v150c0,10-5,15-15,15s-15-5-15-15V240h-10v150c0,10-5,15-15,15s-15-5-15-15V240H75c-10,0-15-5-15-15V125C60,115,65,110,60,110z"/>
-            </svg>
+            <div id="model-3d-wrapper">
+                <svg id="model-svg" class="model-svg" viewBox="0 0 200 500">
+                    <path fill="#000" d="M100,50c15,0,25,10,25,25s-10,25-25,25s-25-10-25-25S85,50,100,50z M60,110h80c10,0,15,5,15,15v100c0,10-5,15-15,15h-15v150c0,10-5,15-15,15s-15-5-15-15V240h-10v150c0,10-5,15-15,15s-15-5-15-15V240H75c-10,0-15-5-15-15V125C60,115,65,110,60,110z"/>
+                </svg>
+            </div>
             <img id="f-top" class="cloth-layer top-piece">
             <img id="f-bottom" class="cloth-layer bottom-piece">
         </div>
@@ -104,6 +123,16 @@
         const x = e.pageX || e.touches[0].pageX;
         currentRot += (x - startX) * 0.7;
         stage.style.transform = `rotateY(${currentRot}deg)`;
+        
+        // 根據旋轉角度動態調整陰影（簡化版）
+        const rotY = (currentRot % 360 + 360) % 360; // 確保角度為正
+        const wrapper = document.getElementById('model-3d-wrapper');
+        if (rotY > 90 && rotY < 270) {
+            wrapper.style.transform = 'rotateY(180deg)'; // 模擬反轉，光影也跟著變
+        } else {
+            wrapper.style.transform = 'rotateY(0deg)';
+        }
+
         startX = x;
     };
     area.addEventListener('mousedown', start);
