@@ -2,29 +2,34 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>許阿桂試衣間 | 3D Reality X</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>許阿桂試衣間 | 3D AI Studio</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
 
     <style>
-        :root { --apple-blue: #0071e3; --bg: #ffffff; }
-        body { background: var(--bg); font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; }
+        :root { --apple-blue: #0071e3; --bg: #f5f5f7; --text: #1d1d1f; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; }
         
-        /* 畫布與掃描線 */
-        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
-        #scanner { position: absolute; width: 100%; height: 3px; background: var(--apple-blue); box-shadow: 0 0 15px var(--apple-blue); top: 50%; display: none; animation: scan 2s infinite; z-index: 5; }
-        @keyframes scan { 0% { top: 25%; opacity: 0; } 50% { opacity: 1; } 100% { top: 75%; opacity: 0; } }
+        /* 畫布層：確保背景不是黑色的 */
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: var(--bg); }
 
-        /* UI 層 */
-        .overlay { position: relative; z-index: 10; pointer-events: none; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 40px 0; }
-        .ui-element { pointer-events: auto; text-align: center; }
-        h1 { font-size: 32px; font-weight: 700; letter-spacing: -1px; margin: 0; }
-        .status-box { font-size: 13px; color: var(--apple-blue); font-weight: 600; margin-top: 10px; background: rgba(255,255,255,0.7); padding: 5px 20px; border-radius: 20px; backdrop-filter: blur(10px); }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 90%; max-width: 440px; margin-bottom: 20px; }
-        .btn-apple { background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.1); padding: 20px; border-radius: 24px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .btn-apple:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
+        /* UI 層：確保文字始終在最上方且清晰 */
+        .ui-layer { position: relative; z-index: 100; height: 100vh; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 50px 0; }
+        .ui-element { pointer-events: auto; }
+
+        h1 { font-size: 32px; font-weight: 700; margin: 0; letter-spacing: -1px; }
+        .status-pill { background: white; padding: 8px 20px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: var(--apple-blue); font-size: 14px; font-weight: 600; margin-top: 15px; border: 1px solid rgba(0,0,0,0.05); }
+
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 90%; max-width: 440px; margin-bottom: 30px; }
+        .btn-apple { background: white; border: 1px solid rgba(0,0,0,0.1); padding: 22px; border-radius: 20px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
+        .btn-apple:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+
+        #scanner { position: absolute; width: 100%; height: 4px; background: var(--apple-blue); box-shadow: 0 0 20px var(--apple-blue); top: 50%; display: none; animation: scan 2.5s infinite; z-index: 50; }
+        @keyframes scan { 0% { top: 20%; opacity: 0; } 50% { opacity: 1; } 100% { top: 80%; opacity: 0; } }
     </style>
 </head>
 <body>
@@ -32,80 +37,90 @@
 <div id="canvas-container"></div>
 <div id="scanner"></div>
 
-<div class="overlay">
-    <div class="ui-element">
+<div class="ui-layer">
+    <div class="ui-element" style="text-align:center;">
         <h1>許阿桂 <span style="color:var(--apple-blue)">試衣間</span></h1>
-        <div id="status" class="status-box">正在連線 3D 伺服器...</div>
+        <div id="status" class="status-pill">啟動 3D 渲染引擎...</div>
     </div>
 
     <div class="controls ui-element">
-        <label class="btn-apple">＋ 合成上衣<input type="file" hidden onchange="applyClothing(this, 'top')"></label>
-        <label class="btn-apple">＋ 合成下著<input type="file" hidden onchange="applyClothing(this, 'bottom')"></label>
+        <label class="btn-apple">＋ 合成上衣<input type="file" hidden onchange="processClothes(this, 'top')"></label>
+        <label class="btn-apple">＋ 合成下著<input type="file" hidden onchange="processClothes(this, 'bottom')"></label>
     </div>
 </div>
 
 <script>
     let scene, camera, renderer, mannequin, net;
-    // 使用參數 ?pose=A 確保模型以 A-Pose 出現
+    // 採用 Ready Player Me 的 A-Pose 穩定連結
     const MODEL_URL = 'https://models.readyplayer.me/64b5166675239a5310617f6c.glb?pose=A';
 
     function init() {
-        // 1. 初始化 3D 空間
+        // 1. 建立場景
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf5f5f7);
-        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 3.5);
+        scene.background = new THREE.Color(0xf5f5f7); // 明亮的蘋果底色
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 3);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        const light = new THREE.AmbientLight(0xffffff, 0.8);
+        // 2. 光源 (確保模型不是黑色的)
+        const light = new THREE.AmbientLight(0xffffff, 1.0); // 環境光加強
         scene.add(light);
-        const spot = new THREE.DirectionalLight(0xffffff, 0.5);
-        spot.position.set(2, 5, 5);
-        scene.add(spot);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
 
-        // 2. 載入模型
+        // 3. 載入 3D 模特兒
         const loader = new THREE.GLTFLoader();
-        loader.load(MODEL_URL, (gltf) => {
-            mannequin = gltf.scene;
-            mannequin.position.y = -1.2;
-            mannequin.scale.set(1, 1, 1);
-            
-            // 初始化材質
-            mannequin.traverse(child => {
-                if (child.isMesh) {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 });
-                }
-            });
-            
-            scene.add(mannequin);
-            document.getElementById('status').innerText = "3D A-Pose 模特兒已就緒";
-        });
+        loader.load(MODEL_URL, 
+            (gltf) => {
+                mannequin = gltf.scene;
+                mannequin.position.y = -1.1;
+                mannequin.scale.set(0.9, 0.9, 0.9);
+                
+                // 強制賦予基礎材質
+                mannequin.traverse(node => {
+                    if (node.isMesh) {
+                        node.material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+                    }
+                });
+                
+                scene.add(mannequin);
+                document.getElementById('status').innerText = "3D A-Pose 模特兒載入完成";
+            },
+            (xhr) => {
+                const p = Math.round(xhr.loaded / xhr.total * 100);
+                document.getElementById('status').innerText = `搬運模特兒中: ${p}%`;
+            },
+            (err) => {
+                document.getElementById('status').innerText = "模型載入受阻，嘗試重連中...";
+            }
+        );
 
         animate();
-        loadAI();
+        initAI();
     }
 
-    async function loadAI() {
+    async function initAI() {
         net = await bodyPix.load();
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        if (mannequin) mannequin.rotation.y += 0.005; // 保持優雅旋轉
+        if (mannequin) mannequin.rotation.y += 0.005;
         renderer.render(scene, camera);
     }
 
-    // AI 提取與材質貼合
-    async function applyClothing(input, type) {
+    async function processClothes(input, type) {
         if (!input.files[0] || !net) return;
         
         const status = document.getElementById('status');
         const scanner = document.getElementById('scanner');
-        status.innerText = "阿桂正在提取衣物...";
+        status.innerText = "阿桂正在提取服裝...";
         scanner.style.display = "block";
 
         const img = new Image();
@@ -117,26 +132,48 @@
             canvas.width = 1024; canvas.height = 1024;
             const ctx = canvas.getContext('2d');
             
-            // AI 提取並繪製到 1024 畫布上
-            const offscreen = document.createElement('canvas');
-            offscreen.width = img.width; offscreen.height = img.height;
-            const oCtx = offscreen.getContext('2d');
-            oCtx.drawImage(img, 0, 0);
-            const data = oCtx.getImageData(0, 0, img.width, img.height);
+            // AI 提取邏輯
+            const temp = document.createElement('canvas');
+            temp.width = img.width; temp.height = img.height;
+            const tCtx = temp.getContext('2d');
+            tCtx.drawImage(img, 0, 0);
+            const data = tCtx.getImageData(0, 0, img.width, img.height);
             
             const targets = type === 'top' ? [10, 11, 12, 13, 14, 15] : [16, 17, 18, 19];
             for (let i = 0; i < data.data.length; i += 4) {
                 if (!targets.includes(seg.data[i / 4])) data.data[i + 3] = 0;
             }
-            oCtx.putImageData(data, 0, 0);
+            tCtx.putImageData(data, 0, 0);
 
-            // 背景填色與衣服放置
-            ctx.fillStyle = "#eeeeee";
+            // 繪製材質貼圖
+            ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, 1024, 1024);
-            // 調整衣服在貼圖上的位置以配合 A-Pose
-            ctx.drawImage(offscreen, 256, type === 'top' ? 120 : 500, 512, 512);
+            ctx.drawImage(temp, 256, type === 'top' ? 100 : 500, 512, 512);
 
-            const texture = new THREE.CanvasTexture(canvas);
-            const newMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.6 });
-            
-            // 應用到模特
+            const tex = new THREE.CanvasTexture(canvas);
+            const newMat = new THREE.MeshStandardMaterial({ map: tex });
+
+            mannequin.traverse(node => {
+                if (node.isMesh) {
+                    node.material = newMat;
+                    node.material.needsUpdate = true;
+                }
+            });
+
+            setTimeout(() => {
+                scanner.style.display = "none";
+                status.innerText = "合成完畢";
+            }, 1000);
+        };
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    init();
+</script>
+</body>
+</html>
