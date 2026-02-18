@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StyleHero Pro | 誠實診斷</title>
+    <style>
+        :root { --apple-blue: #0071e3; --apple-bg: #ffffff; }
+        body { background: var(--apple-bg); font-family: -apple-system, sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 90%; max-width: 440px; text-align: center; }
+        
+        /* 試衣間區域 */
+        .outfit-display { display: flex; gap: 15px; justify-content: center; margin-bottom: 30px; }
+        .upload-card { 
+            background: #f5f5f7; width: 110px; height: 150px; border-radius: 20px; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: pointer; overflow: hidden; position: relative; border: 2px solid transparent;
+            transition: 0.3s;
+        }
+        .upload-card img { width: 100%; height: 100%; object-fit: cover; display: none; }
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; display: none; border: 1px solid #ddd; }
+        
+        /* 診斷面板 */
+        .diagnostic-panel { 
+            background: #f5f5f7; border-radius: 20px; padding: 20px; margin-top: 20px;
+            text-align: left; opacity: 0; transition: 0.5s;
+        }
+        .score-bar { height: 6px; background: #d2d2d7; border-radius: 3px; margin: 10px 0; overflow: hidden; }
+        .score-fill { height: 100%; background: var(--apple-blue); width: 0%; transition: 1s ease-out; }
+        
+        .btn-analyze { 
+            background: #1d1d1f; color: white; border: none; padding: 18px 40px; 
+            border-radius: 40px; font-size: 17px; font-weight: 600; cursor: pointer; width: 100%;
+        }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="font-weight: 700;">StyleHero <span style="color:var(--apple-blue)">Pro</span></h1>
+    
+    <div class="outfit-display">
+        <label class="upload-card" id="label-top">
+            <span id="plus-top">+</span>
+            <img id="img-top" crossorigin="anonymous">
+            <div id="dot-top" class="color-dot"></div>
+            <input type="file" hidden onchange="handleUpload(this, 'top')">
+        </label>
+        <label class="upload-card" id="label-mid">
+            <span id="plus-mid">+</span>
+            <img id="img-mid" crossorigin="anonymous">
+            <div id="dot-mid" class="color-dot"></div>
+            <input type="file" hidden onchange="handleUpload(this, 'mid')">
+        </label>
+    </div>
+
+    <button class="btn-analyze" onclick="analyzeStyle()">開始誠實診斷</button>
+
+    <div class="diagnostic-panel" id="panel">
+        <div style="font-weight: 600; margin-bottom: 5px;">配色協調度 <span id="score-text">0</span>%</div>
+        <div class="score-bar"><div class="score-fill" id="score-fill"></div></div>
+        <p id="feedback-msg" style="font-size: 14px; color: #424245; line-height: 1.6;"></p>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    let colors = { top: null, mid: null };
+
+    function handleUpload(input, type) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.getElementById('img-' + type);
+            img.src = e.target.result;
+            img.style.display = 'block';
+            document.getElementById('plus-' + type).style.display = 'none';
+            
+            img.onload = function() {
+                colors[type] = extractColor(img);
+                const dot = document.getElementById('dot-' + type);
+                dot.style.background = `rgb(${colors[type].r},${colors[type].g},${colors[type].b})`;
+                dot.style.display = 'block';
+            }
+        }
+        reader.readAsDataURL(file);
+    }
+
+    function extractColor(imgElement) {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 50; canvas.height = 50;
+        ctx.drawImage(imgElement, 0, 0, 50, 50);
+        const data = ctx.getImageData(25, 25, 1, 1).data; // 取中心點像素
+        return { r: data[0], g: data[1], b: data[2] };
+    }
+
+    function analyzeStyle() {
+        if (!colors.top || !colors.mid) return alert("請先上傳兩件衣服的照片");
+
+        const panel = document.getElementById('panel');
+        panel.style.opacity = "1";
+
+        // 誠實算法：計算色差 (簡單歐幾里德距離)
+        const diff = Math.sqrt(
+            Math.pow(colors.top.r - colors.mid.r, 2) +
+            Math.pow(colors.top.g - colors.mid.g, 2) +
+            Math.pow(colors.top.b - colors.mid.b, 2)
+        );
+
+        let score = 0;
+        let msg = "";
+
+        if (diff < 50) {
+            score = 90;
+            msg = "【誠實診斷】同色系搭配非常安全且具備高級感。這種 One-Tone 風格是 2026 年的主流，能拉長視覺比例。";
+        } else if (diff > 200) {
+            score = 85;
+            msg = "【誠實診斷】強烈對比色。這是一套極具個性的搭配，只要其中一方是基礎色（黑白灰），這就是完美的英雄裝扮。";
+        } else {
+            score = 60;
+            msg = "【誠實診斷】色彩協調度一般。這兩種顏色在視覺上可能會有衝突，建議加入一件白色單品來中和色調。";
+        }
+
+        document.getElementById('score-fill').style.width = score + "%";
+        document.getElementById('score-text').innerText = score;
+        document.getElementById('feedback-msg').innerText = msg;
+    }
+</script>
+</body>
+</html>
