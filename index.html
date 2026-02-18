@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StyleHero X | Full Outfit AI</title>
+    <title>StyleHero X | AI Flow</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
 
@@ -13,126 +14,142 @@
         .container { width: 90%; max-width: 440px; padding: 40px 0; text-align: center; }
 
         /* 3D 舞台 */
-        .stage-box { perspective: 1500px; width: 320px; height: 500px; margin: 0 auto 30px; cursor: grab; position: relative; }
+        .stage-box { perspective: 1500px; width: 320px; height: 500px; margin: 0 auto 20px; cursor: grab; position: relative; }
         #rotating-stage { 
             position: relative; width: 100%; height: 100%; 
             transform-style: preserve-3d; transition: transform 0.1s;
             display: flex; align-items: center; justify-content: center;
         }
 
-        #model-base { width: 85%; height: 90%; object-fit: contain; pointer-events: none; opacity: 0.8; }
+        /* 模特兒底圖 (使用內聯 SVG 確保不破圖) */
+        .model-svg { width: 85%; height: 90%; opacity: 0.2; pointer-events: none; }
         
         /* 衣服與褲子圖層 */
         .cloth-layer { 
             position: absolute; mix-blend-mode: multiply; pointer-events: none;
-            object-fit: cover; backface-visibility: hidden; transition: opacity 0.8s;
+            object-fit: cover; backface-visibility: hidden; transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
         }
         
-        /* 上衣位置 */
         .top-piece { width: 68%; height: 55%; top: 12%; border-radius: 40% 40% 10% 10%; z-index: 15; transform: translateZ(5px); }
-        /* 下著位置 */
         .bottom-piece { width: 45%; height: 45%; top: 48%; border-radius: 10% 10% 30% 30%; z-index: 10; transform: translateZ(3px); }
 
-        .loading-text { font-size: 12px; color: var(--apple-blue); margin-bottom: 10px; font-weight: 600; min-height: 18px; }
+        /* 合成動畫掃描線 */
+        .scanning { position: absolute; width: 100%; height: 2px; background: var(--apple-blue); top: 0; left: 0; z-index: 50; display: none; box-shadow: 0 0 15px var(--apple-blue); animation: scan 2s infinite; }
+        @keyframes scan { from { top: 10%; opacity: 0; } 50% { opacity: 1; } to { top: 80%; opacity: 0; } }
+
+        .loading-bar { font-size: 13px; color: var(--apple-blue); font-weight: 600; margin-bottom: 20px; height: 20px; }
         
         /* 按鈕矩陣 */
-        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .up-card { background: white; padding: 15px 5px; border-radius: 18px; border: 1px solid #d2d2d7; font-size: 12px; font-weight: 600; cursor: pointer; }
-        .up-card span { display: block; color: #86868b; font-size: 10px; margin-top: 4px; }
-        .active { border-color: var(--apple-blue); background: #f0f7ff; }
-
-        .btn-reset { color: #ff3b30; background: none; border: none; margin-top: 25px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .up-card { background: white; padding: 20px 10px; border-radius: 20px; border: 1px solid #d2d2d7; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .up-card.processing { opacity: 0.5; cursor: wait; background: #f5f5f7; }
+        .up-card.active { border-color: var(--apple-blue); color: var(--apple-blue); }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="status" class="loading-text">正在初始化 AI 穿搭引擎...</div>
-    <h1 style="font-weight: 700; font-size: 24px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
+    <div id="status" class="loading-bar">系統初始化中...</div>
+    <h1 style="font-weight: 700; font-size: 26px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
     
     <div class="stage-box" id="touch-area">
         <div id="rotating-stage">
-            <img id="model-base" src="https://raw.githubusercontent.com/l3072829-dotcom/GAME-TEST/main/male_model.png">
-            <img id="f-top" class="cloth-layer top-piece" style="opacity:0">
-            <img id="f-bottom" class="cloth-layer bottom-piece" style="opacity:0">
+            <div id="scan-line" class="scanning"></div>
+            <svg id="model-svg" class="model-svg" viewBox="0 0 200 500">
+                <path fill="#000" d="M100,50c15,0,25,10,25,25s-10,25-25,25s-25-10-25-25S85,50,100,50z M60,110h80c10,0,15,5,15,15v100c0,10-5,15-15,15h-15v150c0,10-5,15-15,15s-15-5-15-15V240h-10v150c0,10-5,15-15,15s-15-5-15-15V240H75c-10,0-15-5-15-15V125C60,115,65,110,60,110z"/>
+            </svg>
+            <img id="f-top" class="cloth-layer top-piece">
+            <img id="f-bottom" class="cloth-layer bottom-piece">
         </div>
     </div>
 
     <div class="control-panel">
-        <label class="up-card">＋ 加入上衣<span id="t-s">支援 AI 提取</span><input type="file" hidden onchange="processPiece(this, 'top')"></label>
-        <label class="up-card">＋ 加入下著<span id="b-s">支援 AI 提取</span><input type="file" hidden onchange="processPiece(this, 'bottom')"></label>
+        <label class="up-card" id="btn-top">＋ 合成上衣<input type="file" id="input-top" hidden onchange="queueProcess(this, 'top')"></label>
+        <label class="up-card" id="btn-bottom">＋ 合成下著<input type="file" id="input-bottom" hidden onchange="queueProcess(this, 'bottom')"></label>
     </div>
 
-    <button class="btn-reset" onclick="location.reload()">清空並重置舞台</button>
+    <button style="color: #ff3b30; background: none; border: none; margin-top: 30px; cursor: pointer; font-size: 14px;" onclick="location.reload()">重置舞台</button>
 </div>
 
 <script>
     let net, isDragging = false, startX, currentRot = 0;
-    const status = document.getElementById('status');
-    const stage = document.getElementById('rotating-stage');
-
-    // 初始化 BodyPix
+    
+    // 初始化 AI
     async function init() {
-        net = await bodyPix.load();
-        status.innerText = "AI Ready • 已準備好提取單品";
+        try {
+            net = await bodyPix.load({
+                architecture: 'MobileNetV1',
+                outputStride: 16,
+                multiplier: 0.75,
+                quantBytes: 2
+            });
+            document.getElementById('status').innerText = "AI 引擎就緒 • 請上傳照片";
+        } catch(e) {
+            document.getElementById('status').innerText = "AI 啟動失敗，請檢查網路";
+        }
     }
     init();
 
-    // 旋轉控制 (支援滑鼠與觸控)
+    // 旋轉控制
+    const stage = document.getElementById('rotating-stage');
     const area = document.getElementById('touch-area');
-    const handleStart = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
-    const handleMove = (e) => {
+    const start = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
+    const move = (e) => {
         if (!isDragging) return;
         const x = e.pageX || e.touches[0].pageX;
         currentRot += (x - startX) * 0.8;
         stage.style.transform = `rotateY(${currentRot}deg)`;
         startX = x;
     };
-    area.addEventListener('mousedown', handleStart);
-    window.addEventListener('mousemove', handleMove);
+    area.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', () => isDragging = false);
-    area.addEventListener('touchstart', handleStart);
-    window.addEventListener('touchmove', handleMove, {passive: false});
+    area.addEventListener('touchstart', start);
+    window.addEventListener('touchmove', move, {passive: false});
     window.addEventListener('touchend', () => isDragging = false);
 
-    // AI 提取邏輯：區分上身與下身
-    async function processPiece(input, type) {
+    // 智慧合成佇列
+    async function queueProcess(input, type) {
         if (!input.files[0]) return;
-        status.innerText = `AI 正在掃描${type === 'top' ? '上衣' : '下著'}...`;
         
+        const card = document.getElementById('btn-' + type);
+        const status = document.getElementById('status');
+        const scanner = document.getElementById('scan-line');
+        
+        card.classList.add('processing');
+        status.innerText = `正在分析${type === 'top' ? '上衣' : '下著'}特徵...`;
+        scanner.style.display = 'block';
+
         const file = input.files[0];
         const img = new Image();
         img.src = URL.createObjectURL(file);
         
         img.onload = async () => {
-            const segmentation = await net.segmentPersonBodyParts(img);
+            const seg = await net.segmentPersonBodyParts(img);
             const canvas = document.createElement('canvas');
             canvas.width = img.width; canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
             
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const pixels = imageData.data;
-
-            // 定義提取部位 ID
-            // 上衣：12,13(軀幹), 10,11,14,15(手臂)
-            // 下著：16,17(大腿), 18,19(小腿)
             const targets = type === 'top' ? [10, 11, 12, 13, 14, 15] : [16, 17, 18, 19];
-
-            for (let i = 0; i < pixels.length; i += 4) {
-                const partId = segmentation.data[i / 4];
-                if (!targets.includes(partId)) {
-                    pixels[i + 3] = 0; // 剔除其餘部位
-                }
+            for (let i = 0; i < data.data.length; i += 4) {
+                if (!targets.includes(seg.data[i / 4])) data.data[i + 3] = 0;
             }
-            ctx.putImageData(imageData, 0, 0);
+            ctx.putImageData(data, 0, 0);
             
-            const targetId = type === 'top' ? 'f-top' : 'f-bottom';
-            const targetEl = document.getElementById(targetId);
-            targetEl.src = canvas.toDataURL();
-            targetEl.style.opacity = "0.85";
-            
-            status.innerText = "提取完成，已自動對齊模特兒";
+            // 慢慢合成完的視覺延遲
+            setTimeout(() => {
+                const targetImg = document.getElementById(type === 'top' ? 'f-top' : 'f-bottom');
+                targetImg.src = canvas.toDataURL();
+                targetImg.style.opacity = "0.85";
+                
+                card.classList.remove('processing');
+                card.classList.add('active');
+                scanner.style.display = 'none';
+                status.innerText = "合成完成";
+            }, 800);
         };
     }
 </script>
