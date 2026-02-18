@@ -3,55 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StyleHero X | AI Flow</title>
+    <title>許阿桂試衣間 | AI 360 Showroom</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
 
     <style>
         :root { --apple-blue: #0071e3; --bg: #f5f5f7; }
-        body { background: var(--bg); font-family: -apple-system, sans-serif; margin: 0; display: flex; justify-content: center; overflow-x: hidden; color: #1d1d1f; }
+        body { background: var(--bg); font-family: "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 0; display: flex; justify-content: center; overflow-x: hidden; color: #1d1d1f; }
         .container { width: 90%; max-width: 440px; padding: 40px 0; text-align: center; }
 
         /* 3D 舞台 */
-        .stage-box { perspective: 1500px; width: 320px; height: 500px; margin: 0 auto 20px; cursor: grab; position: relative; }
+        .stage-box { perspective: 1500px; width: 320px; height: 520px; margin: 0 auto 20px; cursor: grab; position: relative; }
         #rotating-stage { 
             position: relative; width: 100%; height: 100%; 
-            transform-style: preserve-3d; transition: transform 0.1s;
+            transform-style: preserve-3d; transition: transform 0.1s ease-out;
             display: flex; align-items: center; justify-content: center;
         }
 
-        /* 模特兒底圖 (使用內聯 SVG 確保不破圖) */
-        .model-svg { width: 85%; height: 90%; opacity: 0.2; pointer-events: none; }
+        /* 模特兒底圖：內聯 SVG 以確保 100% 顯影 */
+        .model-svg { width: 85%; height: 90%; opacity: 0.15; pointer-events: none; }
         
-        /* 衣服與褲子圖層 */
+        /* 衣服與下著圖層 */
         .cloth-layer { 
             position: absolute; mix-blend-mode: multiply; pointer-events: none;
-            object-fit: cover; backface-visibility: hidden; transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+            object-fit: cover; backface-visibility: hidden; 
+            transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
             opacity: 0;
         }
         
         .top-piece { width: 68%; height: 55%; top: 12%; border-radius: 40% 40% 10% 10%; z-index: 15; transform: translateZ(5px); }
         .bottom-piece { width: 45%; height: 45%; top: 48%; border-radius: 10% 10% 30% 30%; z-index: 10; transform: translateZ(3px); }
 
-        /* 合成動畫掃描線 */
+        /* 掃描線動畫 */
         .scanning { position: absolute; width: 100%; height: 2px; background: var(--apple-blue); top: 0; left: 0; z-index: 50; display: none; box-shadow: 0 0 15px var(--apple-blue); animation: scan 2s infinite; }
         @keyframes scan { from { top: 10%; opacity: 0; } 50% { opacity: 1; } to { top: 80%; opacity: 0; } }
 
-        .loading-bar { font-size: 13px; color: var(--apple-blue); font-weight: 600; margin-bottom: 20px; height: 20px; }
+        .loading-status { font-size: 13px; color: var(--apple-blue); font-weight: 600; margin-bottom: 20px; height: 20px; letter-spacing: 0.5px; }
         
-        /* 按鈕矩陣 */
+        /* 許阿桂專屬控制按鈕 */
         .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .up-card { background: white; padding: 20px 10px; border-radius: 20px; border: 1px solid #d2d2d7; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.3s; }
-        .up-card.processing { opacity: 0.5; cursor: wait; background: #f5f5f7; }
-        .up-card.active { border-color: var(--apple-blue); color: var(--apple-blue); }
+        .up-card { 
+            background: white; padding: 22px 10px; border-radius: 22px; 
+            border: 1px solid #d2d2d7; font-size: 15px; font-weight: 600; 
+            cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .up-card:active { transform: scale(0.96); background: #f5f5f7; }
+        .up-card.active { border-color: var(--apple-blue); color: var(--apple-blue); box-shadow: 0 0 0 4px rgba(0,113,227,0.1); }
+        
+        .btn-reset { color: #86868b; background: none; border: none; margin-top: 30px; cursor: pointer; font-size: 13px; text-decoration: underline; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="status" class="loading-bar">系統初始化中...</div>
-    <h1 style="font-weight: 700; font-size: 26px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
+    <div id="status" class="loading-status">許阿桂 AI 系統初始化中...</div>
+    <h1 style="font-weight: 700; font-size: 28px; letter-spacing: -1px; margin-bottom: 30px;">
+        許阿桂 <span style="color:var(--apple-blue)">試衣間</span>
+    </h1>
     
     <div class="stage-box" id="touch-area">
         <div id="rotating-stage">
@@ -65,40 +74,35 @@
     </div>
 
     <div class="control-panel">
-        <label class="up-card" id="btn-top">＋ 合成上衣<input type="file" id="input-top" hidden onchange="queueProcess(this, 'top')"></label>
-        <label class="up-card" id="btn-bottom">＋ 合成下著<input type="file" id="input-bottom" hidden onchange="queueProcess(this, 'bottom')"></label>
+        <label class="up-card" id="btn-top">＋ 合成上衣<input type="file" hidden onchange="handleProcess(this, 'top')"></label>
+        <label class="up-card" id="btn-bottom">＋ 合成下著<input type="file" hidden onchange="handleProcess(this, 'bottom')"></label>
     </div>
 
-    <button style="color: #ff3b30; background: none; border: none; margin-top: 30px; cursor: pointer; font-size: 14px;" onclick="location.reload()">重置舞台</button>
+    <button class="btn-reset" onclick="location.reload()">重新整理試衣間</button>
 </div>
 
 <script>
     let net, isDragging = false, startX, currentRot = 0;
     
-    // 初始化 AI
-    async function init() {
+    async function loadModel() {
         try {
-            net = await bodyPix.load({
-                architecture: 'MobileNetV1',
-                outputStride: 16,
-                multiplier: 0.75,
-                quantBytes: 2
-            });
-            document.getElementById('status').innerText = "AI 引擎就緒 • 請上傳照片";
+            net = await bodyPix.load();
+            document.getElementById('status').innerText = "試衣間已準備就緒";
         } catch(e) {
-            document.getElementById('status').innerText = "AI 啟動失敗，請檢查網路";
+            document.getElementById('status').innerText = "網路不穩，請重新整理";
         }
     }
-    init();
+    loadModel();
 
-    // 旋轉控制
     const stage = document.getElementById('rotating-stage');
     const area = document.getElementById('touch-area');
+    
+    // 360度旋轉互動
     const start = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
     const move = (e) => {
         if (!isDragging) return;
         const x = e.pageX || e.touches[0].pageX;
-        currentRot += (x - startX) * 0.8;
+        currentRot += (x - startX) * 0.7;
         stage.style.transform = `rotateY(${currentRot}deg)`;
         startX = x;
     };
@@ -109,17 +113,17 @@
     window.addEventListener('touchmove', move, {passive: false});
     window.addEventListener('touchend', () => isDragging = false);
 
-    // 智慧合成佇列
-    async function queueProcess(input, type) {
+    // AI 提取與慢慢合成邏輯
+    async function handleProcess(input, type) {
         if (!input.files[0]) return;
         
         const card = document.getElementById('btn-' + type);
         const status = document.getElementById('status');
         const scanner = document.getElementById('scan-line');
         
-        card.classList.add('processing');
-        status.innerText = `正在分析${type === 'top' ? '上衣' : '下著'}特徵...`;
+        status.innerText = `阿桂正在為您提取${type === 'top' ? '上衣' : '下著'}...`;
         scanner.style.display = 'block';
+        card.classList.add('active');
 
         const file = input.files[0];
         const img = new Image();
@@ -133,23 +137,22 @@
             ctx.drawImage(img, 0, 0);
             const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
             
+            // AI 部位過濾
             const targets = type === 'top' ? [10, 11, 12, 13, 14, 15] : [16, 17, 18, 19];
             for (let i = 0; i < data.data.length; i += 4) {
                 if (!targets.includes(seg.data[i / 4])) data.data[i + 3] = 0;
             }
             ctx.putImageData(data, 0, 0);
             
-            // 慢慢合成完的視覺延遲
+            // 延遲視覺化效果，展現「慢慢合成」
             setTimeout(() => {
                 const targetImg = document.getElementById(type === 'top' ? 'f-top' : 'f-bottom');
                 targetImg.src = canvas.toDataURL();
-                targetImg.style.opacity = "0.85";
+                targetImg.style.opacity = "0.9";
                 
-                card.classList.remove('processing');
-                card.classList.add('active');
                 scanner.style.display = 'none';
-                status.innerText = "合成完成";
-            }, 800);
+                status.innerText = "穿搭合成完畢";
+            }, 1000);
         };
     }
 </script>
