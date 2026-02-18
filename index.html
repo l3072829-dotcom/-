@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StyleHero X | AI 360 Showroom</title>
+    <title>StyleHero X | AI 360</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
     <style>
-        :root { --apple-blue: #0071e3; --bg: #f5f5f7; --glass: rgba(255, 255, 255, 0.8); }
+        :root { --apple-blue: #0071e3; --bg: #f5f5f7; }
         body { background: var(--bg); font-family: -apple-system, sans-serif; margin: 0; display: flex; justify-content: center; overflow-x: hidden; color: #1d1d1f; }
         .container { width: 90%; max-width: 440px; padding: 40px 0; text-align: center; }
 
-        /* 3D 旋轉舞台 */
+        /* 3D 舞台 */
         .stage-box { perspective: 1500px; width: 320px; height: 480px; margin: 0 auto 30px; cursor: grab; }
         #rotating-stage { 
             position: relative; width: 100%; height: 100%; 
@@ -22,156 +22,101 @@
             display: flex; align-items: center; justify-content: center;
         }
 
-        #model-base { width: 85%; height: 85%; object-fit: contain; pointer-events: none; opacity: 0.8; }
+        /* 模特兒底圖：使用濾鏡確保在無圖時也有個影子，這裡我換了一個更穩定的佔位網址 */
+        #model-base { 
+            width: 80%; height: 85%; object-fit: contain; pointer-events: none;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
+        }
         
         .cloth-layer { 
-            position: absolute; width: 68%; height: 62%; top: 14%;
+            position: absolute; width: 68%; height: 60%; top: 15%;
             mix-blend-mode: multiply; pointer-events: none;
             object-fit: cover; border-radius: 40% 40% 25% 25%;
             backface-visibility: hidden; transition: opacity 0.8s ease;
         }
         
-        #front-img { transform: translateZ(2px); z-index: 10; }
-        #back-img { transform: translateZ(-2px) rotateY(180deg); z-index: 5; }
+        #front-img { transform: translateZ(5px); z-index: 10; }
+        #back-img { transform: translateZ(-5px) rotateY(180deg); z-index: 5; }
 
-        /* AI 加載狀態 */
-        #ai-status { font-size: 12px; color: var(--apple-blue); margin-bottom: 10px; font-weight: 600; }
-        .loading-overlay { 
-            position: absolute; top:0; left:0; width:100%; height:100%; 
-            background: rgba(255,255,255,0.6); backdrop-filter: blur(5px);
-            display: none; align-items: center; justify-content: center; border-radius: 35px; z-index: 100;
-        }
+        /* 性別切換器 */
+        .gender-nav { display: flex; background: #e3e3e7; padding: 3px; border-radius: 20px; width: 160px; margin: 0 auto 20px; }
+        .g-btn { flex: 1; padding: 8px; border-radius: 17px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.3s; color: #86868b; background: transparent; }
+        .g-btn.active { background: white; color: #1d1d1f; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 
-        /* 控制組件 */
-        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .up-card { background: white; padding: 18px 10px; border-radius: 20px; border: 1px solid #d2d2d7; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        .up-card.active { border-color: var(--apple-blue); background: #f0f7ff; }
+        .loading-text { font-size: 12px; color: var(--apple-blue); margin-bottom: 10px; font-weight: 600; min-height: 18px; }
         
-        .btn-main { background: #1d1d1f; color: white; border: none; width: 100%; padding: 18px; border-radius: 20px; font-weight: 600; margin-top: 15px; cursor: pointer; }
-        .btn-reset { color: #ff3b30; background: none; border: none; margin-top: 20px; cursor: pointer; font-size: 13px; }
+        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .up-card { background: white; padding: 18px 10px; border-radius: 20px; border: 1px solid #d2d2d7; font-size: 13px; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="ai-status">AI Engine Initializing...</div>
-    <h1 style="font-weight: 700; font-size: 24px; letter-spacing: -0.5px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
+    <div id="status" class="loading-text">正在初始化 AI 引擎...</div>
+    <h1 style="font-weight: 700; font-size: 24px;">StyleHero <span style="color:var(--apple-blue)">X</span></h1>
     
+    <div class="gender-nav">
+        <button id="m-btn" class="g-btn active" onclick="setGender('m')">男性</button>
+        <button id="f-btn" class="g-btn" onclick="setGender('f')">女性</button>
+    </div>
+
     <div class="stage-box" id="touch-area">
         <div id="rotating-stage">
-            <div id="loader" class="loading-overlay">AI Analyzing...</div>
-            <img id="model-base" src="https://www.freeiconspng.com/uploads/man-silhouette-icon-10.png">
+            <img id="model-base" src="https://raw.githubusercontent.com/l3072829-dotcom/GAME-TEST/main/male_model.png" onerror="this.src='https://via.placeholder.com/300x500/FFFFFF/CCCCCC?text=MODEL'">
             <img id="front-img" class="cloth-layer" style="opacity: 0;">
             <img id="back-img" class="cloth-layer" style="opacity: 0;">
         </div>
     </div>
 
     <div class="upload-grid">
-        <label class="up-card" id="l-f">＋ 拍攝正面<input type="file" hidden onchange="processImage(this, 'front')"></label>
-        <label class="up-card" id="l-b">＋ 拍攝背面<input type="file" hidden onchange="processImage(this, 'back')"></label>
+        <label class="up-card">＋ 拍攝正面<input type="file" hidden onchange="process(this, 'front')"></label>
+        <label class="up-card">＋ 拍攝背面<input type="file" hidden onchange="process(this, 'back')"></label>
     </div>
-
-    <button class="btn-main" onclick="saveResult()">儲存穿搭大片</button>
-    <button class="btn-reset" onclick="location.reload()">清除並重置</button>
+    
+    <button style="background:#1d1d1f; color:white; border:none; width:100%; padding:18px; border-radius:20px; font-weight:600; margin-top:15px; cursor:pointer;" onclick="location.reload()">重新開始</button>
 </div>
 
 <script>
     let net, isDragging = false, startX, currentRot = 0, hasBack = false;
-
-    // 1. 初始化 AI 模型
-    async function initAI() {
-        net = await bodyPix.load({
-            architecture: 'MobileNetV1',
-            outputStride: 16,
-            multiplier: 0.75,
-            quantBytes: 2
-        });
-        document.getElementById('ai-status').innerText = "AI Ready • Local Processing";
-    }
-    initAI();
-
-    // 2. 旋轉邏輯
     const stage = document.getElementById('rotating-stage');
+    const status = document.getElementById('status');
+
+    // 初始化 AI
+    async function init() {
+        try {
+            net = await bodyPix.load();
+            status.innerText = "AI 就緒 • 智慧提取已啟用";
+        } catch (e) {
+            status.innerText = "AI 載入失敗，將使用普通模式";
+        }
+    }
+    init();
+
+    // 性別切換
+    function setGender(g) {
+        document.getElementById('m-btn').classList.toggle('active', g === 'm');
+        document.getElementById('f-btn').classList.toggle('active', g === 'f');
+        const modelImg = document.getElementById('model-base');
+        modelImg.src = g === 'm' ? "https://raw.githubusercontent.com/l3072829-dotcom/GAME-TEST/main/male_model.png" : "https://raw.githubusercontent.com/l3072829-dotcom/GAME-TEST/main/female_model.png";
+    }
+
+    // 旋轉控制
     const area = document.getElementById('touch-area');
-    const handleStart = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
-    const handleMove = (e) => {
+    const start = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
+    const move = (e) => {
         if (!isDragging) return;
         const x = e.pageX || e.touches[0].pageX;
         currentRot += (x - startX) * 0.8;
         stage.style.transform = `rotateY(${currentRot}deg)`;
         startX = x;
     };
-    area.addEventListener('mousedown', handleStart);
-    window.addEventListener('mousemove', handleMove);
+    area.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', () => isDragging = false);
-    area.addEventListener('touchstart', handleStart);
-    window.addEventListener('touchmove', handleMove);
+    area.addEventListener('touchstart', start);
+    window.addEventListener('touchmove', move);
     window.addEventListener('touchend', () => isDragging = false);
 
-    // 3. AI 圖像處理 (提取衣服)
-    async function processImage(input, side) {
-        if (!input.files[0]) return;
-        document.getElementById('loader').style.display = 'flex';
-        
-        const file = input.files[0];
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        
-        img.onload = async () => {
-            // 執行 AI 分割
-            const segmentation = await net.segmentPersonBodyParts(img);
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const pixels = imageData.data;
-
-            // 只保留軀幹與手臂 (BodyPix ID: 10-15)
-            for (let i = 0; i < pixels.length; i += 4) {
-                const partId = segmentation.data[i / 4];
-                if (![10, 11, 12, 13, 14, 15].includes(partId)) {
-                    pixels[i + 3] = 0; // 設為透明
-                }
-            }
-            ctx.putImageData(imageData, 0, 0);
-            const extractUrl = canvas.toDataURL();
-
-            // 應用到舞台
-            if (side === 'front') {
-                const f = document.getElementById('front-img');
-                f.src = extractUrl;
-                f.style.opacity = "0.85";
-                document.getElementById('l-f').classList.add('active');
-                if (!hasBack) {
-                    const b = document.getElementById('back-img');
-                    b.src = extractUrl;
-                    b.style.opacity = "0.6";
-                    b.style.filter = "brightness(0.7) blur(2px)";
-                }
-            } else {
-                const b = document.getElementById('back-img');
-                b.src = extractUrl;
-                b.style.opacity = "0.85";
-                b.style.filter = "none";
-                hasBack = true;
-                document.getElementById('l-b').classList.add('active');
-            }
-            document.getElementById('loader').style.display = 'none';
-        };
-    }
-
-    function saveResult() {
-        html2canvas(document.getElementById('touch-area')).then(canvas => {
-            const a = document.createElement('a');
-            a.download = 'StyleHeroX-360.png';
-            a.href = canvas.toDataURL();
-            a.click();
-        });
-    }
-</script>
-</body>
-</html>
+    // AI 處理圖片
+    async function process(input, side) {
+        if (!input.files
