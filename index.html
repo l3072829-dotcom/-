@@ -3,187 +3,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>許阿桂試衣間 | 3D 立體版</title>
+    <title>許阿桂試衣間 | 3D AI Studio</title>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
 
     <style>
         :root { --apple-blue: #0071e3; --bg: #f5f5f7; }
-        body { background: var(--bg); font-family: "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 0; display: flex; justify-content: center; overflow-x: hidden; color: #1d1d1f; }
-        .container { width: 90%; max-width: 440px; padding: 40px 0; text-align: center; }
-
-        /* 3D 舞台 */
-        .stage-box { perspective: 1500px; width: 320px; height: 520px; margin: 0 auto 20px; cursor: grab; position: relative; }
-        #rotating-stage { 
-            position: relative; width: 100%; height: 100%; 
-            transform-style: preserve-3d; transition: transform 0.1s ease-out;
-            display: flex; align-items: center; justify-content: center;
-        }
-
-        /* 模特兒底圖：這次使用 CSS 創造立體感 */
-        #model-3d-wrapper { 
-            position: relative; width: 85%; height: 90%; 
-            display: flex; justify-content: center; align-items: center; 
-            transform-style: preserve-3d; transition: transform 0.3s;
-        }
-        .model-svg { 
-            width: 100%; height: 100%; opacity: 0.15; pointer-events: none;
-            filter: drop-shadow(0 0 5px rgba(0,0,0,0.2)); /* 輕微陰影 */
-            transform: translateZ(0px); /* 確保在 3D 空間 */
-        }
-        /* 創造立體感的偽元素光影 */
-        #model-3d-wrapper::before, #model-3d-wrapper::after {
-            content: ''; position: absolute; top: 0; bottom: 0;
-            width: 50%; opacity: 0.3; pointer-events: none;
-            border-radius: 50%; /* 模擬圓柱體陰影 */
-        }
-        #model-3d-wrapper::before { left: 0; background: radial-gradient(circle at 10% 50%, rgba(255,255,255,0.2) 0%, transparent 80%); } /* 左側高光 */
-        #model-3d-wrapper::after { right: 0; background: radial-gradient(circle at 90% 50%, rgba(0,0,0,0.1) 0%, transparent 80%); } /* 右側陰影 */
-
-        /* 衣服與下著圖層 */
-        .cloth-layer { 
-            position: absolute; mix-blend-mode: multiply; pointer-events: none;
-            object-fit: cover; backface-visibility: hidden; 
-            transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-            opacity: 0;
-        }
+        body { background: var(--bg); font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; color: #1d1d1f; }
         
-        .top-piece { width: 68%; height: 55%; top: 12%; border-radius: 40% 40% 10% 10%; z-index: 15; transform: translateZ(8px); } /* 讓上衣更靠前 */
-        .bottom-piece { width: 45%; height: 45%; top: 48%; border-radius: 10% 10% 30% 30%; z-index: 10; transform: translateZ(5px); } /* 讓下著稍微靠後 */
+        /* UI 層級 */
+        .overlay { position: absolute; top: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 40px 0; z-index: 10; }
+        .ui-element { pointer-events: auto; }
+
+        h1 { font-weight: 700; font-size: 28px; letter-spacing: -1px; margin: 0; }
+        .status-tag { font-size: 13px; color: var(--apple-blue); font-weight: 600; background: rgba(255,255,255,0.8); padding: 5px 15px; border-radius: 20px; backdrop-filter: blur(5px); margin-top: 10px; }
+
+        /* 3D 畫布 */
+        #three-canvas { position: fixed; top: 0; left: 0; outline: none; }
+
+        /* 控制面板 */
+        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 90%; max-width: 400px; margin-bottom: 20px; }
+        .up-card { background: white; padding: 20px 10px; border-radius: 22px; border: 1px solid rgba(0,0,0,0.1); font-size: 14px; font-weight: 600; text-align: center; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .up-card:active { transform: scale(0.95); }
+        .up-card.loading { background: #e8e8ed; color: #86868b; }
 
         /* 掃描線動畫 */
-        .scanning { position: absolute; width: 100%; height: 2px; background: var(--apple-blue); top: 0; left: 0; z-index: 50; display: none; box-shadow: 0 0 15px var(--apple-blue); animation: scan 2s infinite; }
-        @keyframes scan { from { top: 10%; opacity: 0; } 50% { opacity: 1; } to { top: 80%; opacity: 0; } }
-
-        .loading-status { font-size: 13px; color: var(--apple-blue); font-weight: 600; margin-bottom: 20px; height: 20px; letter-spacing: 0.5px; }
-        
-        /* 許阿桂專屬控制按鈕 */
-        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .up-card { 
-            background: white; padding: 22px 10px; border-radius: 22px; 
-            border: 1px solid #d2d2d7; font-size: 15px; font-weight: 600; 
-            cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-        }
-        .up-card:active { transform: scale(0.96); background: #f5f5f7; }
-        .up-card.active { border-color: var(--apple-blue); color: var(--apple-blue); box-shadow: 0 0 0 4px rgba(0,113,227,0.1); }
-        
-        .btn-reset { color: #86868b; background: none; border: none; margin-top: 30px; cursor: pointer; font-size: 13px; text-decoration: underline; }
+        .scan-line { position: absolute; top: 0; width: 100%; height: 2px; background: var(--apple-blue); box-shadow: 0 0 15px var(--apple-blue); display: none; animation: scanning 2s infinite; z-index: 5; }
+        @keyframes scanning { from { top: 20%; opacity: 0; } 50% { opacity: 1; } to { top: 80%; opacity: 0; } }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="status" class="loading-status">許阿桂 AI 系統初始化中...</div>
-    <h1 style="font-weight: 700; font-size: 28px; letter-spacing: -1px; margin-bottom: 30px;">
-        許阿桂 <span style="color:var(--apple-blue)">試衣間</span>
-    </h1>
-    
-    <div class="stage-box" id="touch-area">
-        <div id="rotating-stage">
-            <div id="scan-line" class="scanning"></div>
-            <div id="model-3d-wrapper">
-                <svg id="model-svg" class="model-svg" viewBox="0 0 200 500">
-                    <path fill="#000" d="M100,50c15,0,25,10,25,25s-10,25-25,25s-25-10-25-25S85,50,100,50z M60,110h80c10,0,15,5,15,15v100c0,10-5,15-15,15h-15v150c0,10-5,15-15,15s-15-5-15-15V240h-10v150c0,10-5,15-15,15s-15-5-15-15V240H75c-10,0-15-5-15-15V125C60,115,65,110,60,110z"/>
-                </svg>
-            </div>
-            <img id="f-top" class="cloth-layer top-piece">
-            <img id="f-bottom" class="cloth-layer bottom-piece">
-        </div>
+<canvas id="three-canvas"></canvas>
+<div class="scan-line" id="scanner"></div>
+
+<div class="overlay">
+    <div class="ui-element" style="text-align: center;">
+        <h1>許阿桂 <span style="color:var(--apple-blue)">試衣間</span></h1>
+        <div id="status" class="status-tag">3D 空間初始化中...</div>
     </div>
 
-    <div class="control-panel">
-        <label class="up-card" id="btn-top">＋ 合成上衣<input type="file" hidden onchange="handleProcess(this, 'top')"></label>
-        <label class="up-card" id="btn-bottom">＋ 合成下著<input type="file" hidden onchange="handleProcess(this, 'bottom')"></label>
+    <div class="control-panel ui-element">
+        <label class="up-card" id="label-top">＋ 合成上衣<input type="file" hidden onchange="handleAIUpload(this, 'top')"></label>
+        <label class="up-card" id="label-bottom">＋ 合成下著<input type="file" hidden onchange="handleAIUpload(this, 'bottom')"></label>
     </div>
-
-    <button class="btn-reset" onclick="location.reload()">重新整理試衣間</button>
 </div>
 
 <script>
-    let net, isDragging = false, startX, currentRot = 0;
-    
-    async function loadModel() {
-        try {
-            net = await bodyPix.load();
-            document.getElementById('status').innerText = "試衣間已準備就緒";
-        } catch(e) {
-            document.getElementById('status').innerText = "網路不穩，請重新整理";
-        }
+    let scene, camera, renderer, model, net;
+    const MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SimpleSkinning/glTF-Binary/SimpleSkinning.glb';
+
+    // 1. 初始化 3D 引擎
+    function initThree() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf5f5f7);
+        
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 5);
+
+        renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // 光源設定
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(5, 10, 7.5);
+        scene.add(sunLight);
+
+        // 載入 3D 模特兒
+        const loader = new THREE.GLTFLoader();
+        loader.load(MODEL_URL, (gltf) => {
+            model = gltf.scene;
+            model.scale.set(0.015, 0.015, 0.015);
+            model.position.y = -1.5;
+            
+            // 初始材質：極簡白
+            model.traverse((o) => {
+                if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 });
+            });
+
+            scene.add(model);
+            document.getElementById('status').innerText = "阿桂已為您準備好 3D 模特兒";
+        });
+
+        animate();
     }
-    loadModel();
 
-    const stage = document.getElementById('rotating-stage');
-    const area = document.getElementById('touch-area');
-    
-    // 360度旋轉互動
-    const start = (e) => { isDragging = true; startX = e.pageX || e.touches[0].pageX; };
-    const move = (e) => {
-        if (!isDragging) return;
-        const x = e.pageX || e.touches[0].pageX;
-        currentRot += (x - startX) * 0.7;
-        stage.style.transform = `rotateY(${currentRot}deg)`;
+    function animate() {
+        requestAnimationFrame(animate);
+        if (model) model.rotation.y += 0.005; // 自動旋轉
+        renderer.render(scene, camera);
+    }
+
+    // 2. 初始化 AI
+    async function initAI() {
+        net = await bodyPix.load();
+    }
+
+    // 3. AI 提取與 3D 貼合邏輯
+    async function handleAIUpload(input, type) {
+        if (!input.files[0] || !model) return;
         
-        // 根據旋轉角度動態調整陰影（簡化版）
-        const rotY = (currentRot % 360 + 360) % 360; // 確保角度為正
-        const wrapper = document.getElementById('model-3d-wrapper');
-        if (rotY > 90 && rotY < 270) {
-            wrapper.style.transform = 'rotateY(180deg)'; // 模擬反轉，光影也跟著變
-        } else {
-            wrapper.style.transform = 'rotateY(0deg)';
-        }
-
-        startX = x;
-    };
-    area.addEventListener('mousedown', start);
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', () => isDragging = false);
-    area.addEventListener('touchstart', start);
-    window.addEventListener('touchmove', move, {passive: false});
-    window.addEventListener('touchend', () => isDragging = false);
-
-    // AI 提取與慢慢合成邏輯
-    async function handleProcess(input, type) {
-        if (!input.files[0]) return;
-        
-        const card = document.getElementById('btn-' + type);
         const status = document.getElementById('status');
-        const scanner = document.getElementById('scan-line');
-        
-        status.innerText = `阿桂正在為您提取${type === 'top' ? '上衣' : '下著'}...`;
+        const scanner = document.getElementById('scanner');
+        status.innerText = `阿桂正在掃描衣物特徵...`;
         scanner.style.display = 'block';
-        card.classList.add('active');
 
         const file = input.files[0];
         const img = new Image();
         img.src = URL.createObjectURL(file);
-        
+
         img.onload = async () => {
-            const seg = await net.segmentPersonBodyParts(img);
+            // AI 分割
+            const segmentation = await net.segmentPersonBodyParts(img);
+            
             const canvas = document.createElement('canvas');
-            canvas.width = img.width; canvas.height = img.height;
+            canvas.width = 1024; canvas.height = 1024;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
             
-            // AI 部位過濾
+            // 建立提取後的衣服畫布
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width; tempCanvas.height = img.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(img, 0, 0);
+            const imgData = tCtx.getImageData(0, 0, img.width, img.height);
+            
             const targets = type === 'top' ? [10, 11, 12, 13, 14, 15] : [16, 17, 18, 19];
-            for (let i = 0; i < data.data.length; i += 4) {
-                if (!targets.includes(seg.data[i / 4])) data.data[i + 3] = 0;
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                if (!targets.includes(segmentation.data[i / 4])) imgData.data[i + 3] = 0;
             }
-            ctx.putImageData(data, 0, 0);
-            
-            // 延遲視覺化效果，展現「慢慢合成」
-            setTimeout(() => {
-                const targetImg = document.getElementById(type === 'top' ? 'f-top' : 'f-bottom');
-                targetImg.src = canvas.toDataURL();
-                targetImg.style.opacity = "0.9";
-                
-                scanner.style.display = 'none';
-                status.innerText = "穿搭合成完畢";
-            }, 1000);
+            tCtx.putImageData(imgData, 0, 0);
+
+            // 將提取物畫入貼圖並水平翻轉補全 (簡單鏡像)
+            ctx.clearRect(0, 0, 1024, 1024);
+            ctx.drawImage(tempCanvas, 256, 100, 512, 600); 
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.flipY = false;
+
+            // 慢慢合成動畫邏輯
+            let opacityObj = { val: 0 };
+            const targetMaterial = new THREE.MeshStandardMaterial({ 
+                map: texture, 
+                transparent: true, 
+                opacity: 0,
+                roughness: 0.4
+            });
+
+            // 應用材質
+            model.traverse((o) => {
+                if (o.isMesh) {
+                    o.material = targetMaterial;
+                }
+            });
+
+            // 漸進顯影 (1.5秒慢慢合成)
+            const fadeIn = setInterval(() => {
+                opacityObj.val += 0.05;
+                targetMaterial.opacity = opacityObj.val;
+                if (opacityObj.val >= 0.9) {
+                    clearInterval(fadeIn);
+                    scanner.style.display = 'none';
+                    status.innerText = "穿搭合成完畢";
+                }
+            }, 50);
         };
     }
+
+    // 視窗調整
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    initThree();
+    initAI();
 </script>
 </body>
 </html>
